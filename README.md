@@ -1,7 +1,7 @@
 # Los Colonos de la Familia
 
 Ranking familiar de partidas del Catán. Se cargan las victorias (individuales o en equipo, con fecha) y se arma solo el ranking.
-
+a
 ## Estructura
 
 - `index.html`: toda la página (sin build, sin dependencias)
