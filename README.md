@@ -1,7 +1,6 @@
 # Los Colonos de la Familia
 
 Ranking familiar de partidas del Catán. Se cargan las victorias (individuales o en equipo, con fecha) y se arma solo el ranking.
-aa
 ## Estructura
 
 - `index.html`: toda la página (sin build, sin dependencias)
@@ -11,13 +10,13 @@ aa
 
 1. Subí la carpeta a un repo de GitHub (o usá `vercel` desde la terminal dentro de la carpeta).
 2. Importá el proyecto en Vercel. No hace falta configurar nada: framework "Other", sin build command.
-3. Para que las partidas se compartan entre todos los celulares y compus de la familia, conectá una base:
+3. Conectá la base donde se guardan las partidas (es obligatoria: así todos los celulares y compus ven lo mismo):
    - En el proyecto, andá a **Storage** y creá una base **Upstash Redis** desde el Marketplace (el plan gratuito alcanza de sobra).
    - Conectala al proyecto. Vercel agrega solo las variables de entorno (`KV_REST_API_URL` y `KV_REST_API_TOKEN`, o `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN`).
    - Hacé un redeploy.
 4. Abrí la página: el cartelito de arriba tiene que decir "Sincronizado en la nube".
 
-Si no conectás la base, la página funciona igual en **modo local** (guarda en el navegador de cada dispositivo, sin compartir).
+Si la base no está conectada, el cartelito dice "Falta conectar la base de datos en Vercel" y no deja cargar partidas. Las partidas que hayan quedado guardadas en un navegador con la versión vieja (modo local) se suben solas a la nube la primera vez que se abre la página desde ese dispositivo.
 
 ## Cambiar jugadores
 

@@ -62,22 +62,9 @@ h1{
   filter:drop-shadow(0 3px 0 rgba(0,0,0,.45)) drop-shadow(0 0 18px rgba(242,214,117,.35));
 }
 .tagline{font-style:italic;font-size:clamp(17px,2.4vw,22px);opacity:.92;margin-top:6px}
-.dice-row{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:18px}
-.die{
-  width:54px;height:54px;border-radius:10px;background:#fff8e6;border:3px solid var(--wood);
-  display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:7px;gap:2px;
-  box-shadow:0 5px 0 var(--wood-dark),0 10px 18px rgba(0,0,0,.4);cursor:pointer;user-select:none;
-}
-.die.red{background:#f7d9cf}
-.die i{display:block;border-radius:50%}
-.die i.on{background:#3a1d0f}
-.die.red i.on{background:#a3261a}
-.die.rolling{animation:roll .6s ease}
-@keyframes roll{0%{transform:rotate(0) translateY(0)}30%{transform:rotate(200deg) translateY(-22px)}60%{transform:rotate(380deg) translateY(0)}100%{transform:rotate(720deg)}}
-.dice-sum{font-family:'Cinzel',serif;font-weight:900;font-size:28px;color:var(--gold-light);min-width:44px;text-shadow:0 2px 0 #000}
-.dice-hint{font-size:14px;opacity:.7;margin-top:6px;font-style:italic}
 
 /* ---------- BANNER ---------- */
+.status[hidden]{display:none}
 .status{
   display:flex;align-items:center;justify-content:center;gap:8px;margin:18px auto 0;
   font-family:'Cinzel',serif;font-size:13px;letter-spacing:.05em;color:var(--parchment);
@@ -85,7 +72,6 @@ h1{
 }
 .dot{width:10px;height:10px;border-radius:50%;background:#aaa}
 .dot.ok{background:#6ee06e;box-shadow:0 0 8px #6ee06e}
-.dot.local{background:var(--gold);box-shadow:0 0 8px var(--gold)}
 .dot.err{background:#ff6b5a}
 
 /* ---------- PANELES ---------- */
@@ -244,13 +230,7 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
     </div>
     <h1>Los Colonos<br>de la Familia</h1>
     <p class="tagline">Crónica de conquistas en la isla. Quien gana, queda en la historia.</p>
-    <div class="dice-row">
-      <div class="die" id="d1" title="Tirá los dados"></div>
-      <div class="die red" id="d2" title="Tirá los dados"></div>
-      <div class="dice-sum" id="sum">7</div>
-    </div>
-    <div class="dice-hint">Tocá los dados para tirar</div>
-    <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusTxt">Conectando con el archivo del reino...</span></div>
+    <div class="status" id="status" hidden><span class="dot" id="dot"></span><span id="statusTxt">Conectando con el archivo del reino...</span></div>
   </header>
 
   <main class="board">
@@ -312,19 +292,19 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
 
   // ---------- CONFIG ----------
   var JUGADORES = [
-    {n:'Agustín',  c:'#c0392b'},
+    {n:'Agustín',  c:'#e67e22'},
     {n:'Paula',    c:'#2e86c1'},
-    {n:'Norberto', c:'#d68910'},
+    {n:'Norberto', c:'#c0392b'},
     {n:'Iván',     c:'#27ae60'},
     {n:'Julia',    c:'#8e44ad'},
     {n:'Francisco',c:'#16a085'},
     {n:'Valentín', c:'#7f6a4d'}
   ];
   var COLOR = {}; JUGADORES.forEach(function(j){COLOR[j.n]=j.c;});
-  var LS_KEY = 'catan-familia-partidas-v1';
+  var LS_KEY = 'catan-familia-partidas-v1'; // solo para migrar datos viejos
   var API = '/api/partidas';
 
-  var state = { partidas: [], modo: 'ind', sel: [], remoto: false };
+  var state = { partidas: [], modo: 'ind', sel: [], remoto: false, guardando: false };
 
   var $ = function(id){return document.getElementById(id)};
 
@@ -345,6 +325,7 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
   function av(color){return '<svg class="av" style="color:'+color+'" viewBox="0 0 32 32"><use href="#house"/></svg>'}
 
   function setStatus(kind, txt){
+    $('status').hidden = kind!=='err';
     $('dot').className = 'dot '+kind;
     $('statusTxt').textContent = txt;
   }
@@ -354,45 +335,47 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
     clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove('show')},3200);
   }
 
-  // ---------- PERSISTENCIA ----------
-  function leerLocal(){
-    try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch(e){ return []; }
+  // ---------- PERSISTENCIA (nube) ----------
+  function api(method, query, body){
+    return fetch(API+(query||''),{
+      method:method, cache:'no-store',
+      headers: body?{'Content-Type':'application/json'}:undefined,
+      body: body?JSON.stringify(body):undefined
+    }).then(function(r){
+      return r.json().catch(function(){return {}}).then(function(data){
+        if(!r.ok) throw Object.assign(new Error('http '+r.status), {data:data});
+        return data;
+      });
+    });
   }
-  function guardarLocal(){
-    try{ localStorage.setItem(LS_KEY, JSON.stringify(state.partidas)); }catch(e){}
+  function errorNube(e){
+    if(e && e.message==='http 404'){
+      setStatus('err','La nube solo funciona en Vercel (no con Live Server)');
+    } else if(e && e.data && e.data.configured===false){
+      setStatus('err','Falta conectar la base de datos en Vercel');
+    } else {
+      setStatus('err','Sin conexión con la nube. Probá de nuevo en un rato');
+    }
+    state.remoto = false;
+    renderChips();
+  }
+  // Partidas que quedaron guardadas en este navegador con la versión anterior: se suben una vez.
+  function subirLocales(){
+    var locales;
+    try{ locales = JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch(e){ locales = []; }
+    if(!Array.isArray(locales) || !locales.length) return Promise.resolve();
+    return api('POST','',{partidas:locales}).then(function(){
+      try{ localStorage.removeItem(LS_KEY); }catch(e){}
+      toast(locales.length+' partida'+(locales.length===1?'':'s')+' de este dispositivo subida'+(locales.length===1?'':'s')+' a la nube');
+    }).catch(function(){});
   }
   function cargar(){
-    return fetch(API,{cache:'no-store'}).then(function(r){
-      if(!r.ok) throw new Error('http '+r.status);
-      return r.json();
-    }).then(function(data){
-      if(data && data.configured){
-        state.remoto = true;
-        state.partidas = Array.isArray(data.partidas)?data.partidas:[];
-        guardarLocal();
-        setStatus('ok','Sincronizado en la nube: todos ven lo mismo');
-      } else {
-        throw new Error('no configurado');
-      }
-    }).catch(function(){
-      state.remoto = false;
-      state.partidas = leerLocal();
-      setStatus('local','Modo local: guardado solo en este dispositivo');
-    });
-  }
-  function persistir(){
-    guardarLocal();
-    if(!state.remoto) return Promise.resolve();
-    return fetch(API,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({partidas: state.partidas})
-    }).then(function(r){
-      if(!r.ok) throw new Error('http '+r.status);
+    return subirLocales().then(function(){ return api('GET'); }).then(function(data){
+      state.remoto = true;
+      state.partidas = Array.isArray(data.partidas)?data.partidas:[];
       setStatus('ok','Sincronizado en la nube: todos ven lo mismo');
-    }).catch(function(){
-      setStatus('err','No se pudo sincronizar. Quedó guardado en este dispositivo');
-    });
+      renderChips();
+    }).catch(errorNube);
   }
 
   // ---------- DATOS DERIVADOS ----------
@@ -428,7 +411,7 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
     $('hint').textContent = eq
       ? (n<2 ? 'Elegí al menos 2 integrantes del equipo ganador.' : 'Equipo: '+state.sel.join(' + '))
       : (n===0 ? 'Elegí al vencedor de la partida.' : '');
-    $('guardar').disabled = eq ? n<2 : n!==1;
+    $('guardar').disabled = !state.remoto || state.guardando || (eq ? n<2 : n!==1);
   }
   function toggleJugador(n){
     var i = state.sel.indexOf(n);
@@ -512,8 +495,11 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
       b.addEventListener('click',function(){
         if(!confirm('¿Borrar esta partida del registro?')) return;
         var id=b.getAttribute('data-id');
-        state.partidas = state.partidas.filter(function(p){return p.id!==id});
-        persistir(); renderTodo(); toast('Partida borrada');
+        b.disabled = true;
+        api('DELETE','?id='+encodeURIComponent(id)).then(function(){
+          state.partidas = state.partidas.filter(function(p){return p.id!==id});
+          renderTodo(); toast('Partida borrada');
+        }).catch(function(e){ b.disabled = false; errorNube(e); toast('No se pudo borrar. Revisá la conexión'); });
       });
     });
   }
@@ -524,37 +510,20 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
     var fecha = $('fecha').value || hoy();
     var nota = $('nota').value.trim().slice(0,200);
     var p = {id:uid(), fecha:fecha, modo:state.modo, ganadores:state.sel.slice(), nota:nota, creada:Date.now()};
-    state.partidas.push(p);
-    persistir();
-    renderTodo();
-    var msg = state.modo==='eq' ? 'Victoria para el equipo: '+p.ganadores.join(' + ') : 'Victoria de '+p.ganadores[0];
-    toast(msg+'. ¡Gloria eterna!');
-    confetti(p.ganadores.map(function(n){return COLOR[n]}));
-    state.sel=[]; $('nota').value=''; renderChips();
-  }
-
-  // ---------- DADOS ----------
-  var PIPS = {1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
-  function pintarDado(el,v){
-    var h=''; for(var i=0;i<9;i++) h+='<i class="'+(PIPS[v].indexOf(i)>-1?'on':'')+'"></i>';
-    el.innerHTML=h;
-  }
-  var rolling=false;
-  function tirar(){
-    if(rolling) return; rolling=true;
-    var d1=$('d1'), d2=$('d2');
-    d1.classList.add('rolling'); d2.classList.add('rolling');
-    var ticks=0;
-    var iv=setInterval(function(){
-      pintarDado(d1,1+Math.floor(Math.random()*6)); pintarDado(d2,1+Math.floor(Math.random()*6)); ticks++;
-      if(ticks>=8){
-        clearInterval(iv);
-        var a=1+Math.floor(Math.random()*6), b=1+Math.floor(Math.random()*6);
-        pintarDado(d1,a); pintarDado(d2,b); $('sum').textContent=a+b;
-        d1.classList.remove('rolling'); d2.classList.remove('rolling'); rolling=false;
-        if(a+b===7) toast('¡Un 7! Se mueve el ladrón');
-      }
-    },70);
+    state.guardando = true; renderChips();
+    api('POST','',{partidas:[p]}).then(function(){
+      state.guardando = false;
+      state.partidas.push(p);
+      renderTodo();
+      var msg = p.modo==='eq' ? 'Victoria para el equipo: '+p.ganadores.join(' + ') : 'Victoria de '+p.ganadores[0];
+      toast(msg+'. ¡Gloria eterna!');
+      confetti(p.ganadores.map(function(n){return COLOR[n]}));
+      state.sel=[]; $('nota').value=''; renderChips();
+    }).catch(function(e){
+      state.guardando = false;
+      errorNube(e);
+      toast('No se pudo guardar. Revisá la conexión y probá de nuevo');
+    });
   }
 
   // ---------- CONFETI ----------
@@ -591,14 +560,15 @@ footer{text-align:center;color:rgba(243,230,196,.7);margin-top:34px;font-style:i
   }
 
   // ---------- INIT ----------
-  pintarDado($('d1'),3); pintarDado($('d2'),4);
-  $('d1').addEventListener('click',tirar); $('d2').addEventListener('click',tirar);
   $('fecha').value = hoy();
   $('mInd').addEventListener('click',function(){setModo('ind')});
   $('mEq').addEventListener('click',function(){setModo('eq')});
   $('guardar').addEventListener('click',guardar);
   renderChips();
   cargar().then(renderTodo);
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible' && !state.guardando) cargar().then(renderTodo);
+  });
 })();
 </script>
 </body>

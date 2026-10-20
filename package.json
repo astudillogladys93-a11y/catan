@@ -1,0 +1,7 @@
+{
+  "name": "catan-familia",
+  "private": true,
+  "scripts": {
+    "dev": "node dev.js"
+  }
+}
