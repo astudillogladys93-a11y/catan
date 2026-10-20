@@ -2,7 +2,7 @@
 
 Ranking familiar de partidas del Catán. Se cargan las victorias (individuales o en equipo, con fecha) y se arma solo el ranking.
 ## Estructura
-
+a
 - `index.html`: toda la página (sin build, sin dependencias)
 - `api/partidas.js`: función serverless de Vercel que guarda las partidas en Redis
 
